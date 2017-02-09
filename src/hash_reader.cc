@@ -79,7 +79,6 @@ public:
                 
                 max_slot_size = std::max(max_slot_size, slots_size_[len]);
             }
-            slot_buf_.resize(max_slot_size);
     
             index_offset_ = is.ReadInt32();
             if (writer_option_.build_type == 0)
@@ -112,13 +111,20 @@ public:
         ::munmap(ptr_, length_);
         ::close(fd_);
     }
-    
+
+    bool IsNoDataSection() const
+    {
+        if (writer_option_.build_type == 1)
+            return true;
+        return false;
+    }
+
     StringPiece GetInternal(const StringPiece& k) const
     {
-        DCHECK(writer_option_.build_type == 0) << "Invalid Operation, No Value has been load!!!";
+        DCHECK(!IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
 
         StringPiece result("");
-        if (writer_option_.build_type != 0)
+        if (IsNoDataSection())
         {
             return result;
         }
@@ -139,13 +145,13 @@ public:
         {
             auto slot = static_cast<int32_t>((hash + probe) % num_slots);
             auto pos = index_ptr_ + index_offset + slot*slot_size;
-            memcpy(const_cast<char*>(&slot_buf_[0]), pos, slot_size);
-    
-            if (strncmp(&slot_buf_[0], k.data(), len))
+            if (strncmp(pos, k.data(), len))
                 continue;
     
             size_t offset_length = 0;
-            auto offset = DecodeVarint(slot_buf_, len, &offset_length);
+            auto offset = DecodeVarint(reinterpret_cast<const int8_t*>(pos+len), 
+                                       reinterpret_cast<const int8_t*>(pos+len+10), 
+                                       &offset_length);
             if (offset == 0)
             {
                 return result;
@@ -163,13 +169,13 @@ public:
 
     StringPiece Get(const StringPiece& k) const
     {
-        DCHECK(writer_option_.compress_type!=0) << "API Not Compressed Value, Use GetAsString() Instread!!!";
+        DCHECK(writer_option_.compress_type) << "API Not Compressed Value, Use GetAsString() Instread!!!";
         return GetInternal(k);
     }
 
     std::string GetAsString(const StringPiece& k) const
     {
-        DCHECK(writer_option_.compress_type!=1) << "API Expect only use when value compressed!!!";
+        DCHECK(!writer_option_.compress_type) << "API Expect only use when value compressed!!!";
 
         auto cv = GetInternal(k);
         if (writer_option_.compress_type == 0)
@@ -198,9 +204,7 @@ public:
         {
             auto slot = static_cast<int32_t>((hash + probe) % num_slots);
             auto pos = index_ptr_ + index_offset + slot*slot_size;
-            memcpy(const_cast<char*>(&slot_buf_[0]), pos, slot_size);
-    
-            if (strncmp(&slot_buf_[0], k.data(), len) == 0)
+            if (strncmp(pos, k.data(), len) == 0)
             {
                 return true;
             }
@@ -222,7 +226,6 @@ private:
     std::vector<int32_t> key_counts_;
     std::vector<int32_t> slots_;
     std::vector<int32_t> slots_size_;
-    mutable std::vector<char> slot_buf_;
 
     int32_t index_offset_;
     int64_t data_offset_;
