@@ -57,7 +57,7 @@ public:
             key_counts_.resize(max_key_length+1, 0);
             slots_.resize(max_key_length+1, 0);
             slots_size_.resize(max_key_length+1, 0);
-            if (writer_option_.build_type == 0)
+            if (!writer_option_.IsNoDataSection())
             {
                 data_offsets_.resize(max_key_length+1, 0);
             }
@@ -72,7 +72,7 @@ public:
                 slots_size_[len] = is.ReadInt32();
                 index_offsets_[len] = is.ReadInt32();
 
-                if (writer_option_.build_type == 0)
+                if (!writer_option_.IsNoDataSection())
                 {
                     data_offsets_[len] = is.ReadInt64();
                 }
@@ -81,10 +81,7 @@ public:
             }
     
             index_offset_ = is.ReadInt32();
-            if (writer_option_.build_type == 0)
-            {
-                data_offset_ = is.ReadInt64();
-            }
+            data_offset_ = is.ReadInt64();
         }
         catch (const std::exception& ex)
         {
@@ -100,7 +97,7 @@ public:
         //DCHECK(reinterpret_cast<int>(ptr_) != -1) << "mmap " << fname << " failed";
 
         index_ptr_ = ptr_ + index_offset_;
-        if (writer_option_.build_type == 0)
+        if (!writer_option_.IsNoDataSection())
         {
             data_ptr_ =  ptr_ + data_offset_;
         }
@@ -112,19 +109,12 @@ public:
         ::close(fd_);
     }
 
-    bool IsNoDataSection() const
-    {
-        if (writer_option_.build_type == 1)
-            return true;
-        return false;
-    }
-
     StringPiece GetInternal(const StringPiece& k) const
     {
-        DCHECK(!IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
+        DCHECK(!writer_option_.IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
 
         StringPiece result("");
-        if (IsNoDataSection())
+        if (writer_option_.IsNoDataSection())
         {
             return result;
         }

@@ -33,17 +33,6 @@ public:
         Close();
     }
 
-    bool IsNoDataSection() const
-    {
-        if (option_.build_type == 1)
-            return true;
-
-        if (option_.compress_type == 2)
-            return true;
-
-        return false;
-    }
-
     void Put(const StringPiece& k)
     {
         DCHECK(option_.build_type==1) << "Expect Build without value";
@@ -51,12 +40,10 @@ public:
         auto len = k.length();
         if (len == 0)
             return ;
-        ResizeData(len);
 
         marisa::Key key;
         key.set_str(k.data(), len);
         keyset_.push_back(key);
-        key_counts_[len]++;
     }
 
     void PutTogether(const StringPiece& k, const StringPiece& v)
@@ -68,23 +55,22 @@ public:
         marisa::Key key;
         key.set_str(ktv.data(), ktv.length());
         keyset_.push_back(key);
-        key_counts_[k.length()]++;
     }
 
     void Put(const StringPiece& k, const StringPiece& v)
     {
-        DCHECK(option_.build_type==0) << "Expect Build with value";
+        DCHECK(!option_.IsNoDataSection()) << "Expect Build with value";
 
         auto len = k.length();
         if (len == 0)
             return ;
-        ResizeData(len);
 
-        if (IsNoDataSection())
+        if (option_.IsNoDataSection())
         {
             PutTogether(k, v);
             return ;
         }
+        ResizeData(len);
 
         int64_t data_length = data_lengths_[len];
         if (EqualLastValue(len, v))
@@ -182,14 +168,14 @@ public:
         os.AppendInt8(option_.build_type);
         os.AppendBool(option_.with_checksum);
 
-        os.AppendInt32(GetNumKeyCount());
-        os.AppendInt32(key_counts_.size()-1);
-
-        LOG(INFO) << "num key count " << GetNumKeyCount();
-        LOG(INFO) << "max key length " << key_counts_.size()-1;
-
-        if (!IsNoDataSection())
+        if (!option_.IsNoDataSection())
         {
+            os.AppendInt32(GetNumKeyCount());
+            os.AppendInt32(key_counts_.size()-1);
+
+            LOG(INFO) << "num key count " << GetNumKeyCount();
+            LOG(INFO) << "max key length " << key_counts_.size()-1;
+
             int64_t data_length = 0;
             for (size_t i = 0;i < key_counts_.size(); i++)
             {
@@ -208,6 +194,7 @@ public:
 
         uint64_t trie_length = 0;
         FileUtil::GetFileSize(trie_file, &trie_length);
+
         auto index_offset = os.size() + sizeof(int32_t)*2 + sizeof(int64_t);
         os.AppendInt32(index_offset);
         os.AppendInt32(index_offset + pfd_length);
@@ -216,7 +203,7 @@ public:
     
     std::string BuildPFD()
     {
-        if (IsNoDataSection())
+        if (option_.IsNoDataSection())
             return "";
 
         std::vector<uint64_t> v(keyset_.size());

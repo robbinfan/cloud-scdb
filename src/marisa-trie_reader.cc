@@ -46,14 +46,14 @@ public:
             writer_option_.build_type = is.ReadInt8();
             writer_option_.with_checksum = is.ReadBool();
 
-            auto num_key_length = is.ReadInt32();
-            auto max_key_length = is.ReadInt32();
-    
-            LOG(INFO) << "num key count " << num_key_length;
-            LOG(INFO) << "max key length " << max_key_length;
-   
-            if (!IsNoDataSection())
+            if (!writer_option_.IsNoDataSection())
             {
+                auto num_key_length = is.ReadInt32();
+                auto max_key_length = is.ReadInt32();
+    
+                LOG(INFO) << "num key count " << num_key_length;
+                LOG(INFO) << "max key length " << max_key_length;
+   
                 data_offsets_.resize(max_key_length+1, 0);
 
                 for (int32_t i = 0;i < num_key_length; i++)
@@ -68,7 +68,7 @@ public:
             data_offset = is.ReadInt64();
 
             // Must Load pfd first
-            if (!IsNoDataSection())
+            if (!writer_option_.IsNoDataSection())
             {
                 pfd_.Load(fname, pfd_offset);
             }
@@ -96,7 +96,7 @@ public:
 
         index_ptr_ = ptr_ + page_offset;
 
-        if (!IsNoDataSection())
+        if (!writer_option_.IsNoDataSection())
         {
             data_ptr_ =  ptr_ + page_offset  + (data_offset - trie_offset);
         }
@@ -110,17 +110,6 @@ public:
         ::close(fd_);
     }
   
-    bool IsNoDataSection() const
-    {
-        if (writer_option_.build_type == 1)
-            return true;
-
-        if (writer_option_.compress_type == 2)
-            return true;
-
-        return false;
-    }
-
     StringPiece GetValue(uint32_t id, size_t len) const
     {
         auto offset = pfd_.Extract(id);
@@ -134,7 +123,7 @@ public:
 
     StringPiece GetInternal(const StringPiece& k) const
     {
-        DCHECK(!IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
+        DCHECK(!writer_option_.IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
 
         StringPiece result("");
         marisa::Agent agent;

@@ -17,6 +17,17 @@ public:
               with_checksum(false)
         {}
 
+        bool IsNoDataSection() const
+        {
+            if (build_type == 1)
+                return true;
+
+            if (compress_type == 2)
+                return true;
+
+            return false;
+        }
+
         std::string temp_folder;
         double load_factor; // for hash reader only
         int8_t compress_type; // 0: no compress, 1: snappy, 2: trie
