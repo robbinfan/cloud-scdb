@@ -29,6 +29,8 @@ public:
     {
         try
         {
+            (void)option_;
+
             FileInputStream is(fname); 
             char buf[7];
     
@@ -161,13 +163,13 @@ public:
 
     StringPiece Get(const StringPiece& k) const
     {
-        DCHECK(!writer_option_.compress_type==0) << "API Not Compressed Value, Use GetAsString() Instread!!!";
+        DCHECK(writer_option_.compress_type!=0) << "API Not Compressed Value, Use GetAsString() Instread!!!";
         return GetInternal(k);
     }
 
     std::string GetAsString(const StringPiece& k) const
     {
-        DCHECK(!writer_option_.compress_type==1) << "API Expect only use when value compressed!!!";
+        DCHECK(writer_option_.compress_type!=1) << "API Expect only use when value compressed!!!";
 
         auto cv = GetInternal(k);
         if (writer_option_.compress_type == 0)
@@ -212,7 +214,7 @@ private:
     Writer::Option writer_option_;
 
     int fd_;
-    size_t length_;
+    uint64_t length_;
     char* ptr_;
 
     std::vector<int32_t> index_offsets_;

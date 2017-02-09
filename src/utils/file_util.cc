@@ -471,7 +471,7 @@ Status ReadLink(const std::string& fname, std::string* data)
 
 bool IsValidCheckedFile(const std::string& fname)
 {
-    size_t length = 0;
+    uint64_t length = 0;
     GetFileSize(fname, &length);
 
     int fd = ::open(fname.c_str(), O_RDONLY);

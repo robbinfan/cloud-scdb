@@ -30,6 +30,8 @@ public:
         int64_t data_offset = 0;
         try
         {
+            (void)option_;
+
             FileInputStream is(fname); 
             char buf[7];
     
@@ -302,7 +304,7 @@ private:
     Writer::Option writer_option_;
 
     int fd_;
-    size_t length_;
+    uint64_t length_;
     char* ptr_;
 
     std::vector<int64_t> data_offsets_;

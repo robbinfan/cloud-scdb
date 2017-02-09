@@ -12,7 +12,7 @@ CXXFLAGS := -DNDEBUG -O9 -g3 -fno-strict-aliasing -Wall -Werror -fPIC \
 	-I ../include \
 	-I $(HOME)/include/
 
-LDFLAGS := -L/usr/local/lib -L$(HOME)/lib
+LDFLAGS := -L/usr/local/lib
 
 RTFLAGS :=
 
