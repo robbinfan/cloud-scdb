@@ -50,29 +50,26 @@ public:
             LOG(INFO) << "num key count " << num_key_length;
             LOG(INFO) << "max key length " << max_key_length;
    
-            if (writer_option_.build_type == 0)
+            if (!IsNoDataSection())
             {
                 data_offsets_.resize(max_key_length+1, 0);
-            }
 
-            for (int32_t i = 0;i < num_key_length; i++)
-            {
-                auto len = is.ReadInt32();
-                if (writer_option_.build_type == 0)
+                for (int32_t i = 0;i < num_key_length; i++)
                 {
+                    auto len = is.ReadInt32();
                     data_offsets_[len] = is.ReadInt64();
                 }
             }
     
             pfd_offset = is.ReadInt32();
             trie_offset = is.ReadInt32();
-            if (writer_option_.build_type == 0)
-            {
-                data_offset = is.ReadInt64();
-            }
+            data_offset = is.ReadInt64();
 
             // Must Load pfd first
-            pfd_.Load(fname, pfd_offset);
+            if (!IsNoDataSection())
+            {
+                pfd_.Load(fname, pfd_offset);
+            }
         }
         catch (const std::exception& ex)
         {
@@ -97,7 +94,7 @@ public:
 
         index_ptr_ = ptr_ + page_offset;
 
-        if (writer_option_.build_type == 0)
+        if (!IsNoDataSection())
         {
             data_ptr_ =  ptr_ + page_offset  + (data_offset - trie_offset);
         }
@@ -110,7 +107,18 @@ public:
         ::munmap(ptr_, length_);
         ::close(fd_);
     }
-   
+  
+    bool IsNoDataSection() const
+    {
+        if (writer_option_.build_type == 1)
+            return true;
+
+        if (writer_option_.compress_type == 2)
+            return true;
+
+        return false;
+    }
+
     StringPiece GetValue(uint32_t id, size_t len) const
     {
         auto offset = pfd_.Extract(id);
@@ -124,7 +132,7 @@ public:
 
     StringPiece GetInternal(const StringPiece& k) const
     {
-        DCHECK(writer_option_.build_type == 0) << "Invalid Operation, No Value has been load!!!";
+        DCHECK(!IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
 
         StringPiece result("");
         marisa::Agent agent;
@@ -235,7 +243,7 @@ public:
     {
         marisa::Agent agent;
         agent.set_query(key.data(), key.length());
-        return trie_.lookup(agent);
+        return !trie_.lookup(agent);
     }
 
     bool ExistPrefixKey(const StringPiece& key) const

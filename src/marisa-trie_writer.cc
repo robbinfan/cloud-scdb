@@ -33,6 +33,17 @@ public:
         Close();
     }
 
+    bool IsNoDataSection() const
+    {
+        if (option_.build_type == 1)
+            return true;
+
+        if (option_.compress_type == 2)
+            return true;
+
+        return false;
+    }
+
     void Put(const StringPiece& k)
     {
         DCHECK(option_.build_type==1) << "Expect Build without value";
@@ -40,6 +51,7 @@ public:
         auto len = k.length();
         if (len == 0)
             return ;
+        ResizeData(len);
 
         marisa::Key key;
         key.set_str(k.data(), len);
@@ -49,9 +61,6 @@ public:
 
     void PutTogether(const StringPiece& k, const StringPiece& v)
     {
-        if (k.length() == 0)
-            return ;
-
         std::string ktv(k.ToString());
         ktv.append("\t");
         ktv.append(v.ToString());
@@ -69,13 +78,13 @@ public:
         auto len = k.length();
         if (len == 0)
             return ;
+        ResizeData(len);
 
-        if (option_.compress_type == 2)
+        if (IsNoDataSection())
         {
             PutTogether(k, v);
             return ;
         }
-        ResizeData(len);
 
         int64_t data_length = data_lengths_[len];
         if (EqualLastValue(len, v))
@@ -139,7 +148,8 @@ public:
         WriteMetaData(metadata_file, pfd_file, trie_file);
 
         files.push_back(metadata_file);
-        files.push_back(pfd_file);
+        if (!pfd_file.empty())
+            files.push_back(pfd_file);
         files.push_back(trie_file); // let trie closed to data, they will mmape together
 
         for (auto& file : data_files_)
@@ -178,23 +188,23 @@ public:
         LOG(INFO) << "num key count " << GetNumKeyCount();
         LOG(INFO) << "max key length " << key_counts_.size()-1;
 
-        int64_t data_length = 0;
-        for (size_t i = 0;i < key_counts_.size(); i++)
+        if (!IsNoDataSection())
         {
-            if (key_counts_[i] <= 0)
-                continue;
-
-            os.AppendInt32(i);
-
-            if (option_.build_type == 0)
+            int64_t data_length = 0;
+            for (size_t i = 0;i < key_counts_.size(); i++)
             {
+                if (key_counts_[i] <= 0)
+                    continue;
+                os.AppendInt32(i);
+
                 os.AppendInt64(data_length);
                 data_length += data_lengths_[i];
             }
         }
 
         uint64_t pfd_length = 0;
-        FileUtil::GetFileSize(pfd_file, &pfd_length);
+        if (!pfd_file.empty())
+            FileUtil::GetFileSize(pfd_file, &pfd_length);
 
         uint64_t trie_length = 0;
         FileUtil::GetFileSize(trie_file, &trie_length);
@@ -206,6 +216,9 @@ public:
     
     std::string BuildPFD()
     {
+        if (IsNoDataSection())
+            return "";
+
         std::vector<uint64_t> v(keyset_.size());
         for (size_t i = 0;i < keyset_.size(); i++)
         {
