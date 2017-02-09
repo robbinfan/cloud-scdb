@@ -166,6 +166,12 @@ public:
         auto now = Timestamp::Now();
         os.AppendInt64(now.MicroSecondsSinceEpoch());
 
+        // Write Option
+        os.Append(reinterpret_cast<const int8_t*>(&option_.load_factor), sizeof(option_.load_factor));
+        os.AppendInt8(option_.compress_type);
+        os.AppendInt8(option_.build_type);
+        os.AppendBool(option_.with_checksum);
+
         os.AppendInt32(GetNumKeyCount());
         os.AppendInt32(key_counts_.size()-1);
 
