@@ -304,10 +304,10 @@ PForDelta::PForDelta(const std::vector<uint64_t>& v)
             }
         }
 
-        packed_rrr_ = sdsl::rrr_vector<127>(bv);
-        bytes_pfd += size_in_bytes(packed_rrr_);
-        DLOG(INFO) << " ** size of packed_rrr: " << size_in_bytes(packed_rrr_) << " = " << size_in_bytes(packed_rrr_)/static_cast<float>(bytes_v) << "|v|";
-        packed_rank_ = sdsl::rrr_vector<127>::rank_1_type(&packed_rrr_); // 1/4 size of bit vector
+        bv_rrr_ = sdsl::rrr_vector<127>(bv);
+        bytes_pfd += size_in_bytes(bv_rrr_);
+        DLOG(INFO) << " ** size of bv_rrr: " << size_in_bytes(bv_rrr_) << " = " << size_in_bytes(bv_rrr_)/static_cast<float>(bytes_v) << "|v|";
+        bv_rank_ = sdsl::rrr_vector<127>::rank_1_type(&bv_rrr_); // 1/4 size of bit vector
 
         decltype(bv) empty;
         bv.swap(empty);
@@ -346,10 +346,10 @@ PForDelta::PForDelta(const std::vector<uint64_t>& v)
             n += b_;
         }
 
-        packed_rrr_ = sdsl::rrr_vector<127>(bv);
-        bytes_pfd += size_in_bytes(packed_rrr_);
-        DLOG(INFO) << " ** size of packed_rrr: " << size_in_bytes(packed_rrr_) << " = " << size_in_bytes(packed_rrr_)/static_cast<float>(bytes_v) << "|v|";
-        packed_rank_ = sdsl::rrr_vector<127>::rank_1_type(&packed_rrr_);
+        bv_rrr_ = sdsl::rrr_vector<127>(bv);
+        bytes_pfd += size_in_bytes(bv_rrr_);
+        DLOG(INFO) << " ** size of bv_rrr: " << size_in_bytes(bv_rrr_) << " = " << size_in_bytes(bv_rrr_)/static_cast<float>(bytes_v) << "|v|";
+        bv_rank_ = sdsl::rrr_vector<127>::rank_1_type(&bv_rrr_);
 
         decltype(bv) empty;
         bv.swap(empty);
@@ -411,8 +411,8 @@ uint64_t PForDelta::GetNum64(uint64_t* A, uint64_t start, uint32_t length) const
 
 uint64_t PForDelta::Extract(uint64_t idx) const
 {
-    auto r = packed_rank_(idx+1);
-    if (packed_rrr_[idx])
+    auto r = bv_rank_(idx+1);
+    if (bv_rrr_[idx])
     {
         return bas_p_+GetNum64(p_, (r-1)*b_, b_);
     }
@@ -486,10 +486,10 @@ void PForDelta::Save(const std::string& fname)
         DLOG(INFO) << " .- except max[] " << n*sizeof(uint64_t) << " Bytes";
     }
 
-    packed_rrr_.serialize(os);
-    DLOG(INFO) << " ** size of packed_rrr " << size_in_bytes(packed_rrr_) << " Bytes";
+    bv_rrr_.serialize(os);
+    DLOG(INFO) << " ** size of bv rrr " << size_in_bytes(bv_rrr_) << " Bytes";
 
-    packed_rank_.serialize(os);
+    bv_rank_.serialize(os);
 
     if(is_except_)
     {
@@ -553,11 +553,11 @@ void PForDelta::Load(const std::string& fname, size_t offset)
         DLOG(INFO) << " ** size of except max[] " << n*sizeof(uint64_t) << " Bytes";
     }
 
-    packed_rrr_.load(is);
-    DLOG(INFO) << " ** size of packed rrr " << size_in_bytes(packed_rrr_) << " Bytes";
+    bv_rrr_.load(is);
+    DLOG(INFO) << " ** size of bv rrr " << size_in_bytes(bv_rrr_) << " Bytes";
 
-    packed_rank_.load(is);
-    sdsl::util::init_support(packed_rank_, &packed_rrr_);
+    bv_rank_.load(is);
+    sdsl::util::init_support(bv_rank_, &bv_rrr_);
 
     if(is_except_)
     {
@@ -578,8 +578,8 @@ PForDelta::~PForDelta()
     delete [] except_min_;
     delete [] except_max_;
 
-    decltype(packed_rrr_) empty;
-    packed_rrr_.swap(empty);
+    decltype(bv_rrr_) empty;
+    bv_rrr_.swap(empty);
 
     if (is_except_)
     {

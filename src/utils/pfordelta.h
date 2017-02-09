@@ -39,8 +39,8 @@ public:
 
 private:
     // refer https://github.com/simongog/sdsl/wiki/Constructing-compressed-bitvectors
-    sdsl::rrr_vector<127> packed_rrr_;
-    sdsl::rrr_vector<127>::rank_1_type packed_rank_;
+    sdsl::rrr_vector<127> bv_rrr_;
+    sdsl::rrr_vector<127>::rank_1_type bv_rank_;
 
     sdsl::bit_vector except_bv_;
     sdsl::rank_support_v<> except_rank_;
