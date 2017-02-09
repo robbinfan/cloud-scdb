@@ -152,6 +152,7 @@ public:
     
         MergeFiles(files);
         Cleanup(files);
+        done_ = true;
     }
     
     void WriteMetaData(const std::string& fname, const std::string& pfd_file, const std::string& trie_file)
