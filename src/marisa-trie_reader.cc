@@ -115,6 +115,11 @@ public:
   
     StringPiece GetValue(uint32_t id, size_t len) const
     {
+        if (writer_option_.IsNoDataSection())
+        {
+            return StringPiece("");
+        }
+
         auto offset = pfd_.Extract(id);
         auto data_offset = data_offsets_[len];
         auto block_ptr = reinterpret_cast<const int8_t*>(data_ptr_ + data_offset + offset);
@@ -237,7 +242,7 @@ public:
     {
         marisa::Agent agent;
         agent.set_query(key.data(), key.length());
-        return !trie_.lookup(agent);
+        return trie_.lookup(agent);
     }
 
     bool ExistPrefixKey(const StringPiece& key) const

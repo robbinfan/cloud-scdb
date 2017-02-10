@@ -6,7 +6,7 @@ CPUS := $(strip $(if $(shell echo $(PLATFORM)|grep Linux),\
 
 CXX := g++
 
-CXXFLAGS := -DNDEBUG -O9 -g3 -fno-strict-aliasing -Wall -Werror -fPIC \
+CXXFLAGS := -DNDEBUG -g3 -fno-strict-aliasing -Wall -Werror -fPIC \
 	-std=c++0x \
 	-I . \
 	-I ../include \
