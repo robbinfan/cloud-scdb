@@ -36,12 +36,11 @@ public:
             char buf[7];
     
             is.Read(buf, sizeof buf);
-            CHECK(strncmp(buf, "SCDBV2.", sizeof buf) == 0) << "Invalid Format: miss match format";
+            CHECK(strncmp(buf, "SCDBV1.", sizeof buf) == 0) << "Invalid Format: miss match format";
     
             is.Read<int64_t>(); // Timestamp
     
             // Writer Option
-            writer_option_.load_factor = is.Read<double>();
             writer_option_.compress_type = is.Read<int8_t>();
             writer_option_.build_type = is.Read<int8_t>();
             writer_option_.with_checksum = is.Read<bool>();
@@ -51,8 +50,8 @@ public:
                 auto num_key_length = is.Read<int32_t>();
                 auto max_key_length = is.Read<int32_t>();
     
-                LOG(INFO) << "num key count " << num_key_length;
-                LOG(INFO) << "max key length " << max_key_length;
+                DLOG(INFO) << "num key count " << num_key_length;
+                DLOG(INFO) << "max key length " << max_key_length;
    
                 data_offsets_.resize(max_key_length+1, 0);
 
@@ -66,8 +65,6 @@ public:
             pfd_offset = is.Read<int32_t>();
             trie_offset = is.Read<int32_t>();
             data_offset = is.Read<int64_t>();
-
-            LOG(INFO) << "pfd_offset " << pfd_offset;
 
             // Must Load pfd first
             if (!writer_option_.IsNoDataSection())
@@ -95,7 +92,10 @@ public:
         auto offset = (trie_offset / page_size) * page_size;
         auto page_offset = trie_offset % page_size;
 
-        auto mptr = ::mmap(NULL, length_, PROT_READ, MAP_SHARED, fd_, offset);
+        auto mflag = MAP_SHARED;
+        if (option_.mmap_preload)
+            mflag |= MAP_POPULATE;
+        auto mptr = ::mmap(NULL, length_, PROT_READ, mflag, fd_, offset);
         CHECK (mptr != MAP_FAILED) << "mmap failed " << fname;
         ptr_ = reinterpret_cast<char*>(mptr);
 
@@ -131,7 +131,7 @@ public:
         return StringPiece(reinterpret_cast<const char*>(block_ptr + prefix_length), value_length);
     }
 
-    StringPiece GetInternal(const StringPiece& k) const
+    StringPiece GetRawKey(const StringPiece& k) const
     {
         DCHECK(!writer_option_.IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
 
@@ -164,8 +164,28 @@ public:
             auto end = std::min(count, keyset.size());
             for (size_t i = 0;i < end; i++)
             {
-                m.push_back(std::make_pair(std::string(keyset[i].ptr(), keyset[i].length()),
-                                           GetValue(keyset[i].id(), keyset[i].length()).ToString()));
+                StringPiece tk(keyset[i].ptr(), keyset[i].length());
+                if (writer_option_.build_type == 0)
+                {
+                    if (writer_option_.compress_type == 2)
+                    {
+                        auto pos = tk.find('\t', k.length());
+                        if (pos == StringPiece::npos)
+                            continue;
+
+                        m.push_back(std::make_pair(tk.substr(0, k.length()+pos).ToString(),
+                                                   tk.substr(k.length()+pos+1).ToString()));
+
+                    }
+                    else
+                    {
+                        m.push_back(std::make_pair(tk.ToString(), GetAsString(tk)));
+                    }
+                }
+                else
+                {
+                    m.push_back(std::make_pair(tk.ToString(), ""));
+                }
             }
         }
         catch (const marisa::Exception &ex)
@@ -197,6 +217,15 @@ public:
             {
                 m.push_back(std::make_pair(std::string(keyset[i].ptr(), keyset[i].length()),
                                            GetValue(keyset[i].id(), keyset[i].length())));
+                if (writer_option_.build_type == 0 && writer_option_.compress_type == 0)
+                {
+                    m.push_back(std::make_pair(std::string(keyset[i].ptr(), keyset[i].length()),
+                                               GetValue(keyset[i].id(), keyset[i].length())));
+                }
+                else
+                {
+                    m.push_back(std::make_pair(std::string(keyset[i].ptr(), keyset[i].length()), StringPiece("")));
+                }
             }
         }
         catch (const marisa::Exception &ex)
@@ -208,14 +237,9 @@ public:
         return m;
     }
 
-    StringPiece GetRawKey(const StringPiece& key) const
+    std::string GetPrefixKeyAsString(const StringPiece& key) const
     {
-        return GetInternal(key);
-    }
-
-    StringPiece GetPrefixKey(const StringPiece& key) const
-    {
-        StringPiece result("");
+        std::string result;
 
         marisa::Agent agent;
         agent.set_query(key.data(), key.length());
@@ -224,7 +248,7 @@ public:
         {
             if (agent.key()[key.length()] == '\t')
             {
-                result.reset(agent.key().ptr()+key.length()+1, agent.key().length()-key.length()-1);
+                result.assign(agent.key().ptr()+key.length()+1, agent.key().length()-key.length()-1);
                 break;
             }
         }
@@ -233,7 +257,7 @@ public:
 
     std::string GetCompressedValueAsString(const StringPiece& key) const
     {
-        auto v = GetInternal(key);
+        auto v = GetRawKey(key);
 
         std::string ucv;
         snappy::Uncompress(v.data(), v.length(), &ucv);
@@ -277,10 +301,6 @@ public:
         {
             return GetRawKey(key);
         }
-        else if (writer_option_.compress_type == 2)
-        {
-            return GetPrefixKey(key);
-        }
 
         return StringPiece("");
     }
@@ -295,6 +315,9 @@ public:
 
         if (writer_option_.compress_type == 1)
             return GetCompressedValueAsString(key);
+
+        if (writer_option_.compress_type == 2)
+            return GetPrefixKeyAsString(key);
         return "";
     }
 

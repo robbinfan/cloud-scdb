@@ -6,17 +6,16 @@ CPUS := $(strip $(if $(shell echo $(PLATFORM)|grep Linux),\
 
 CXX := g++
 
-CXXFLAGS := -DNDEBUG -g3 -fno-strict-aliasing -Wall -Werror -fPIC \
+CXXFLAGS := -DNDEBUG -O9 -g3 -fno-strict-aliasing -Wall -Werror -fPIC \
 	-std=c++0x \
 	-I . \
-	-I ../include \
-	-I $(HOME)/include/
+	-I ../include
 
 LDFLAGS := -L/usr/local/lib
 
 RTFLAGS :=
 
-LIBS := -lglog -lmarisa -lfarmhash -lsdsl -ldivsufsort -ldivsufsort64 -lsnappy -lz
+LIBS := -lmarisa -lfarmhash -lsdsl -ldivsufsort -ldivsufsort64 -lsnappy -lz
 
 SRC := $(wildcard *.cc) \
 	   $(wildcard utils/*.cc)

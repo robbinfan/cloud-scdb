@@ -16,7 +16,7 @@
 
 namespace scdb {
 
-const static char* kVersion = "SCDBV2.";
+const static char* kVersion = "SCDBV1.";
 
 class MarisaTrieWriter::Impl
 {
@@ -168,7 +168,6 @@ public:
         os.Append(now.MicroSecondsSinceEpoch());
 
         // Write Option
-        os.Append(option_.load_factor);
         os.Append(option_.compress_type);
         os.Append(option_.build_type);
         os.Append(option_.with_checksum);
@@ -178,8 +177,8 @@ public:
             os.Append<int32_t>(GetNumKeyCount());
             os.Append<int32_t>(key_counts_.size()-1);
 
-            LOG(INFO) << "num key count " << GetNumKeyCount();
-            LOG(INFO) << "max key length " << key_counts_.size()-1;
+            DLOG(INFO) << "num key count " << GetNumKeyCount();
+            DLOG(INFO) << "max key length " << key_counts_.size()-1;
 
             int64_t data_length = 0;
             for (size_t i = 0;i < key_counts_.size(); i++)

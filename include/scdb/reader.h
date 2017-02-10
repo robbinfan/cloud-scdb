@@ -12,7 +12,11 @@ class Reader
 public:
     struct Option
     {
-        bool use_lru_cache; // TODO
+        Option()
+            : mmap_preload(false)
+        {}
+
+        bool mmap_preload;
     };
 
     virtual ~Reader() {}

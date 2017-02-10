@@ -24,11 +24,12 @@ void print_help(const char *cmd)
       "  -i, --input=[FILE]     read data to FILE\n"
       "  -o, --output=[FILE]    write data to FILE\n"
       "  -t, --tmpdir=[FILE]    tmp dir to store tmp file \n"
+      "  -f  --fulltest         fulltest after build\n"
       "  -h, --help             print this help\n"
       << std::endl;
 }
 
-int build(const char* input, const char* output, const scdb::Writer::Option& opt)
+int build(const char* input, const char* output, const scdb::Writer::Option& opt, bool fulltest)
 {
     if (!input)
     {
@@ -39,6 +40,7 @@ int build(const char* input, const char* output, const scdb::Writer::Option& opt
     scdb::Timestamp start(scdb::Timestamp::Now());
     scdb::Writer* writer = scdb::CreateWriter(opt, output);
 
+    std::vector<std::string> vt;
     std::ifstream is(input);
     while (!is.eof())
     {
@@ -50,17 +52,34 @@ int build(const char* input, const char* output, const scdb::Writer::Option& opt
         if (opt.compress_type == 2)
         {
             writer->Put(buf);
+            if (fulltest)
+                vt.push_back(buf);
         }
         else
         {
             std::vector<std::string> v;
             boost::algorithm::split(v, buf, boost::is_any_of("\t"));
             writer->Put(v[0], v[1]);
+
+            if (fulltest)
+                vt.push_back(v[0]);
         }
     }
     writer->Close();
     delete writer;
     LOG(INFO) << "Build use " << scdb::Timestamp::Now().MicroSecondsSinceEpoch() - start.MicroSecondsSinceEpoch() << " microseconds";
+
+    if (fulltest)
+    {
+        LOG(INFO) << "Full Test Run";
+        scdb::Reader* reader = scdb::CreateReader(scdb::Reader::Option(), output);
+        for (auto& ti : vt)
+        {
+            bool exist = reader->Exist(ti);
+            CHECK(exist) << "Unexpect result " << ti << " should in sets";
+        }
+        LOG(INFO) << "Full Test Pass!!!";
+    }
     return 0;
 }
 
@@ -78,14 +97,17 @@ int main(int argc, char *argv[])
         { "output", 1, NULL, 'o' },
         { "tmpdir", 1, NULL, 't' },
         { "help", 0, NULL, 'h' },
+        { "fulltest", 0, NULL, 'f' },
         { NULL, 0, NULL, 0 }
     };
     ::cmdopt_t cmdopt;
-    ::cmdopt_init(&cmdopt, argc, argv, "cdwi:o:t:h", long_options);
+    ::cmdopt_init(&cmdopt, argc, argv, "fcdwi:o:t:h", long_options);
 
     scdb::Writer::Option opt;
     opt.build_type = 0;
     opt.compress_type = 0;
+
+    bool fulltest = false;
 
     int label;
     char* input = NULL;
@@ -129,6 +151,11 @@ int main(int argc, char *argv[])
                 print_help(argv[0]);
                 return 0;
             }
+            case 'f':
+            {
+                fulltest = true;
+                break;
+            }
             default: 
             {
                 return 1;
@@ -136,5 +163,5 @@ int main(int argc, char *argv[])
         }
     }
 
-    return build(input, output, opt);
+    return build(input, output, opt, fulltest);
 }
