@@ -78,6 +78,11 @@ public:
         file_->Append(reinterpret_cast<const char*>(&v), sizeof v);
     }
 
+    void Append(const std::string& str)
+    {
+        file_->Append(str.data(), str.length());
+    }
+
     void Append(const char* s)
     {
         file_->Append(StringPiece(s));

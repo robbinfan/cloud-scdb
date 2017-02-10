@@ -89,7 +89,7 @@ public:
                 snappy::Compress(v.data(), v.length(), &cv);
                 value_length = cv.length();
 
-                encode_length = EncodeVarint(cv.length(), dos);
+                encode_length = EncodeVarint(value_length, dos);
                 dos->Append(cv);
             }
             else
@@ -101,7 +101,7 @@ public:
             data_lengths_[len] += encode_length + value_length;
 
             last_values_[len] = v.ToString();
-            last_values_lengths_[len] = value_length;
+            last_values_lengths_[len] = value_length + encode_length;
         }
 
         marisa::Key key;
@@ -175,8 +175,8 @@ public:
 
         if (!option_.IsNoDataSection())
         {
-            os.Append(GetNumKeyCount());
-            os.Append(key_counts_.size()-1);
+            os.Append<int32_t>(GetNumKeyCount());
+            os.Append<int32_t>(key_counts_.size()-1);
 
             LOG(INFO) << "num key count " << GetNumKeyCount();
             LOG(INFO) << "max key length " << key_counts_.size()-1;
@@ -186,9 +186,9 @@ public:
             {
                 if (key_counts_[i] <= 0)
                     continue;
-                os.Append(i);
+                os.Append<int32_t>(i);
 
-                os.Append(data_length);
+                os.Append<int64_t>(data_length);
                 data_length += data_lengths_[i];
             }
         }

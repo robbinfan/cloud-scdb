@@ -41,7 +41,7 @@ public:
             is.Read<int64_t>(); // Timestamp
     
             // Writer Option
-            is.Read(reinterpret_cast<char*>(&writer_option_.load_factor), sizeof(writer_option_.load_factor));
+            writer_option_.load_factor = is.Read<double>();
             writer_option_.compress_type = is.Read<int8_t>();
             writer_option_.build_type = is.Read<int8_t>();
             writer_option_.with_checksum = is.Read<bool>();
@@ -66,6 +66,8 @@ public:
             pfd_offset = is.Read<int32_t>();
             trie_offset = is.Read<int32_t>();
             data_offset = is.Read<int64_t>();
+
+            LOG(INFO) << "pfd_offset " << pfd_offset;
 
             // Must Load pfd first
             if (!writer_option_.IsNoDataSection())
