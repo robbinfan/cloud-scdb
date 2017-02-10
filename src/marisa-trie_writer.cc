@@ -147,6 +147,11 @@ public:
         }
     
         MergeFiles(files);
+        if (option_.with_checksum)
+        {
+            FileUtil::AddChecksumToFile(fname_);
+        }
+
         Cleanup(files);
         done_ = true;
     }
@@ -160,18 +165,18 @@ public:
     
         // Write Time
         auto now = Timestamp::Now();
-        os.AppendInt64(now.MicroSecondsSinceEpoch());
+        os.Append(now.MicroSecondsSinceEpoch());
 
         // Write Option
-        os.Append(reinterpret_cast<const int8_t*>(&option_.load_factor), sizeof(option_.load_factor));
-        os.AppendInt8(option_.compress_type);
-        os.AppendInt8(option_.build_type);
-        os.AppendBool(option_.with_checksum);
+        os.Append(option_.load_factor);
+        os.Append(option_.compress_type);
+        os.Append(option_.build_type);
+        os.Append(option_.with_checksum);
 
         if (!option_.IsNoDataSection())
         {
-            os.AppendInt32(GetNumKeyCount());
-            os.AppendInt32(key_counts_.size()-1);
+            os.Append(GetNumKeyCount());
+            os.Append(key_counts_.size()-1);
 
             LOG(INFO) << "num key count " << GetNumKeyCount();
             LOG(INFO) << "max key length " << key_counts_.size()-1;
@@ -181,9 +186,9 @@ public:
             {
                 if (key_counts_[i] <= 0)
                     continue;
-                os.AppendInt32(i);
+                os.Append(i);
 
-                os.AppendInt64(data_length);
+                os.Append(data_length);
                 data_length += data_lengths_[i];
             }
         }
@@ -196,9 +201,9 @@ public:
         FileUtil::GetFileSize(trie_file, &trie_length);
 
         auto index_offset = os.size() + sizeof(int32_t)*2 + sizeof(int64_t);
-        os.AppendInt32(index_offset);
-        os.AppendInt32(index_offset + pfd_length);
-        os.AppendInt64(index_offset + pfd_length + trie_length);
+        os.Append<int32_t>(index_offset);
+        os.Append<int32_t>(index_offset + pfd_length);
+        os.Append<int64_t>(index_offset + pfd_length + trie_length);
     }
     
     std::string BuildPFD()
@@ -299,7 +304,7 @@ public:
             dos = new FileOutputStream(file);
             data_streams_[len] = dos;
             
-            dos->AppendInt8('\0');
+            dos->Append('\0');
         }
 
         return dos;

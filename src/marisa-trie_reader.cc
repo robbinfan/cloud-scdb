@@ -38,18 +38,18 @@ public:
             is.Read(buf, sizeof buf);
             CHECK(strncmp(buf, "SCDBV2.", sizeof buf) == 0) << "Invalid Format: miss match format";
     
-            is.ReadInt64(); // Timestamp
+            is.Read<int64_t>(); // Timestamp
     
             // Writer Option
             is.Read(reinterpret_cast<char*>(&writer_option_.load_factor), sizeof(writer_option_.load_factor));
-            writer_option_.compress_type = is.ReadInt8();
-            writer_option_.build_type = is.ReadInt8();
-            writer_option_.with_checksum = is.ReadBool();
+            writer_option_.compress_type = is.Read<int8_t>();
+            writer_option_.build_type = is.Read<int8_t>();
+            writer_option_.with_checksum = is.Read<bool>();
 
             if (!writer_option_.IsNoDataSection())
             {
-                auto num_key_length = is.ReadInt32();
-                auto max_key_length = is.ReadInt32();
+                auto num_key_length = is.Read<int32_t>();
+                auto max_key_length = is.Read<int32_t>();
     
                 LOG(INFO) << "num key count " << num_key_length;
                 LOG(INFO) << "max key length " << max_key_length;
@@ -58,14 +58,14 @@ public:
 
                 for (int32_t i = 0;i < num_key_length; i++)
                 {
-                    auto len = is.ReadInt32();
-                    data_offsets_[len] = is.ReadInt64();
+                    auto len = is.Read<int32_t>();
+                    data_offsets_[len] = is.Read<int64_t>();
                 }
             }
     
-            pfd_offset = is.ReadInt32();
-            trie_offset = is.ReadInt32();
-            data_offset = is.ReadInt64();
+            pfd_offset = is.Read<int32_t>();
+            trie_offset = is.Read<int32_t>();
+            data_offset = is.Read<int64_t>();
 
             // Must Load pfd first
             if (!writer_option_.IsNoDataSection())
@@ -81,7 +81,7 @@ public:
  
         if (writer_option_.with_checksum && !FileUtil::IsValidCheckedFile(fname))
         {
-            LOG(FATAL) << "Checksum not matched: " << fname;
+            throw std::invalid_argument("verify checksum failed: " + fname);
         }
 
         fd_ = ::open(fname.c_str(), O_RDONLY);
@@ -92,7 +92,10 @@ public:
         auto page_size = sysconf(_SC_PAGE_SIZE);
         auto offset = (trie_offset / page_size) * page_size;
         auto page_offset = trie_offset % page_size;
-        ptr_ = reinterpret_cast<char*>(::mmap(NULL, length_, PROT_READ, MAP_SHARED, fd_, offset));
+
+        auto mptr = ::mmap(NULL, length_, PROT_READ, MAP_SHARED, fd_, offset);
+        CHECK (mptr != MAP_FAILED) << "mmap failed " << fname;
+        ptr_ = reinterpret_cast<char*>(mptr);
 
         index_ptr_ = ptr_ + page_offset;
 

@@ -3,7 +3,6 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/noncopyable.hpp>
 
-#include "utils/endian.h"
 #include "utils/file_util.h"
 
 namespace scdb {
@@ -34,32 +33,12 @@ public:
         return Read(&v[0], v.size());
     }
 
-    bool ReadBool()
+    template<typename T>
+    T Read()
     {
-        bool v;
+        T v;
         Read(reinterpret_cast<char*>(&v), sizeof v);
         return v;
-    }
-
-    bool ReadInt8()
-    {
-        int8_t v;
-        Read(reinterpret_cast<char*>(&v), sizeof v);
-        return v;
-    }
-
-    int32_t ReadInt32()
-    {
-        int32_t v;
-        Read(reinterpret_cast<char*>(&v), sizeof v);
-        return NetworkToHost32(v);
-    }
-
-    int64_t ReadInt64()
-    {
-        int64_t v;
-        Read(reinterpret_cast<char*>(&v), sizeof v);
-        return NetworkToHost64(v);
     }
 
     void Back(size_t n)
@@ -88,36 +67,25 @@ public:
         file_->Close();
     }
 
-    void Append(const StringPiece& v)
-    {
-        file_->Append(v);
-    }
-  
     void Append(const int8_t* buf, size_t n)
     {
         file_->Append(reinterpret_cast<const char*>(buf), n);
     } 
 
-    void AppendBool(bool v)
+    template<typename T>
+    void Append(T v)
     {
-        Append(reinterpret_cast<int8_t*>(&v), sizeof v);
+        file_->Append(reinterpret_cast<const char*>(&v), sizeof v);
     }
 
-    void AppendInt8(int8_t v)
+    void Append(const char* s)
     {
-        Append(&v, sizeof v);
-    } 
-
-    void AppendInt32(int32_t v)
-    {
-        int32_t be32 = HostToNetwork32(v);
-        file_->Append(reinterpret_cast<const char*>(&be32), sizeof be32);
+        file_->Append(StringPiece(s));
     }
 
-    void AppendInt64(int64_t v)
+    void Append(const StringPiece& v)
     {
-        int64_t be64 = HostToNetwork64(v);
-        file_->Append(reinterpret_cast<const char*>(&be64), sizeof be64);
+        file_->Append(v);
     }
 
     size_t size() const

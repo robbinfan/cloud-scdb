@@ -37,17 +37,17 @@ public:
             is.Read(buf, sizeof buf);
             CHECK(strncmp(buf, "SCDBV1.", 7) == 0) << "Invalid Format: miss match format";
 
-            is.ReadInt64(); // create at
+            is.Read<int64_t>(); // create at
    
             // Writer Option
             is.Read(reinterpret_cast<char*>(&writer_option_.load_factor), sizeof(writer_option_.load_factor));
-            writer_option_.compress_type = is.ReadInt8();
-            writer_option_.build_type = is.ReadInt8();
-            writer_option_.with_checksum = is.ReadBool();
+            writer_option_.compress_type = is.Read<int8_t>();
+            writer_option_.build_type = is.Read<int8_t>();
+            writer_option_.with_checksum = is.Read<bool>();
 
-            auto num_keys = is.ReadInt32();
-            auto num_key_length = is.ReadInt32();
-            auto max_key_length = is.ReadInt32();
+            auto num_keys = is.Read<int32_t>();
+            auto num_key_length = is.Read<int32_t>();
+            auto max_key_length = is.Read<int32_t>();
     
             LOG(INFO) << "num keys " << num_keys;
             LOG(INFO) << "num key count " << num_key_length;
@@ -65,36 +65,42 @@ public:
             int max_slot_size = 0;
             for (int32_t i = 0;i < num_key_length; i++)
             {
-                auto len = is.ReadInt32();
+                auto len = is.Read<int32_t>();
     
-                key_counts_[len] = is.ReadInt32();
-                slots_[len] = is.ReadInt32();
-                slots_size_[len] = is.ReadInt32();
-                index_offsets_[len] = is.ReadInt32();
+                key_counts_[len] = is.Read<int32_t>();
+                slots_[len] = is.Read<int32_t>();
+                slots_size_[len] = is.Read<int32_t>();
+                index_offsets_[len] = is.Read<int32_t>();
 
                 if (!writer_option_.IsNoDataSection())
                 {
-                    data_offsets_[len] = is.ReadInt64();
+                    data_offsets_[len] = is.Read<int64_t>();
                 }
                 
                 max_slot_size = std::max(max_slot_size, slots_size_[len]);
             }
     
-            index_offset_ = is.ReadInt32();
-            data_offset_ = is.ReadInt64();
+            index_offset_ = is.Read<int32_t>();
+            data_offset_ = is.Read<int64_t>();
         }
         catch (const std::exception& ex)
         {
             LOG(ERROR) << "HashReader ctor failed: " << ex.what();
             throw;
         }
-    
+  
+        if (writer_option_.with_checksum && !FileUtil::IsValidCheckedFile(fname))
+        {
+            throw std::invalid_argument("verify checksum failed: " + fname);
+        }
+
         fd_ = ::open(fname.c_str(), O_RDONLY);
         CHECK(fd_) << "open " << fname << " failed";
 
         FileUtil::GetFileSize(fname, &length_);
-        auto ptr_ = reinterpret_cast<char *>(::mmap(NULL, length_, PROT_READ, MAP_SHARED, fd_, 0));
-        //DCHECK(reinterpret_cast<int>(ptr_) != -1) << "mmap " << fname << " failed";
+        auto mptr = ::mmap(NULL, length_, PROT_READ, MAP_SHARED, fd_, 0);
+        CHECK(mptr != MAP_FAILED) << "mmap failed " << fname;
+        ptr_ = reinterpret_cast<char*>(mptr);
 
         index_ptr_ = ptr_ + index_offset_;
         if (!writer_option_.IsNoDataSection())

@@ -262,5 +262,9 @@ Status ReadLink(const std::string& fname, std::string* data);
 // A valid checksum(32bit) at the endof file
 bool IsValidCheckedFile(const std::string& fname);
 
+// Add a checksum to the end of file
+void AddChecksumToFile(const std::string& fname);
+
 } // namespace FileUtil
+
 } // namespace scdb

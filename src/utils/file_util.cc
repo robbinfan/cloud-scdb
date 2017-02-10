@@ -481,22 +481,53 @@ bool IsValidCheckedFile(const std::string& fname)
         return false;
     }
 
-    auto buf = reinterpret_cast<char*>(::mmap(NULL, length, PROT_READ, MAP_PRIVATE, fd, 0));
-    //if (static_cast<int>(buf) == -1)
-    //{
-    //    PLOG(ERROR) << "mmap failed: " << fname;
-    //    ::close(fd);
-    //    return false;
-    //}
+    auto buf = ::mmap(NULL, length, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (buf == MAP_FAILED)
+    {
+        PLOG(ERROR) << "mmap failed: " << fname;
+        ::close(fd);
+        return false;
+    }
 
-    //auto checksum = static_cast<int32_t>(::adler(1, reinterpret_cast<const Bytef*>(buf), static_cast<int>(length-sizeof(int32_t))));
-    //int32_t expected_checksum = 0;
-    //memcpy(&expected_checksum, buf+length-sizeof(int32_t), sizeof(expected_checksum));
+    auto checksum = static_cast<int32_t>(::adler32(1, reinterpret_cast<const Bytef*>(buf), static_cast<int>(length-sizeof(int32_t))));
+    int32_t expected_checksum = 0;
+    memcpy(&expected_checksum, reinterpret_cast<const char*>(buf)+length-sizeof(int32_t), sizeof(expected_checksum));
 
     ::munmap(buf, length);
     ::close(fd);
-    return true;
-    //return checksum==expected_checksum;
+
+    return checksum==expected_checksum;
+}
+
+void AddChecksumToFile(const std::string& fname)
+{
+    uint64_t length = 0;
+    GetFileSize(fname, &length);
+
+    int fd = ::open(fname.c_str(), O_RDONLY);
+    if (fd < 0)
+    {
+        PLOG(ERROR) << "open " << fname << " failed";
+        return ;
+    }
+
+    auto buf = ::mmap(NULL, length, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (buf == MAP_FAILED)
+    {
+        PLOG(ERROR) << "mmap failed: " << fname;
+        ::close(fd);
+        return ;
+    }
+
+    auto checksum = static_cast<int32_t>(::adler32(1, reinterpret_cast<const Bytef*>(buf), static_cast<int>(length)));
+
+    ::munmap(buf, length);
+    ::close(fd);
+
+    WritableFile* result;
+    NewAppendableFile(fname, &result);
+    result->Append(reinterpret_cast<const char*>(&checksum), sizeof checksum);
+    delete result;
 }
 
 } // namespace FileUtil

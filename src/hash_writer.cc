@@ -159,8 +159,12 @@ public:
         }
     
         MergeFiles(files);
-        Cleanup(files);
+        if (option_.with_checksum)
+        {
+            FileUtil::AddChecksumToFile(fname_);
+        }
 
+        Cleanup(files);
         done_ = true;
     }
     
@@ -173,18 +177,18 @@ public:
     
         // Write Time
         auto now = Timestamp::Now();
-        os.AppendInt64(now.MicroSecondsSinceEpoch());
+        os.Append(now.MicroSecondsSinceEpoch());
 
         // Write Option
         os.Append(reinterpret_cast<const int8_t*>(&option_.load_factor), sizeof(option_.load_factor));
-        os.AppendInt8(option_.compress_type);
-        os.AppendInt8(option_.build_type);
-        os.AppendBool(option_.with_checksum);
+        os.Append(option_.compress_type);
+        os.Append(option_.build_type);
+        os.Append(option_.with_checksum);
 
         // Write Size
-        os.AppendInt32(num_keys_);
-        os.AppendInt32(GetNumKeyCount());
-        os.AppendInt32(key_counts_.size()-1);
+        os.Append(num_keys_);
+        os.Append(GetNumKeyCount());
+        os.Append(key_counts_.size()-1);
   
         int64_t data_length = 0; 
         for (size_t i = 0;i < key_counts_.size(); i++)
@@ -194,32 +198,29 @@ public:
                 continue;
             }
     
-            os.AppendInt32(i);
-            os.AppendInt32(key_counts_[i]);
+            os.Append(i);
+            os.Append(key_counts_[i]);
     
             int32_t slots = static_cast<int32_t>(round(key_counts_[i] / option_.load_factor));
-            os.AppendInt32(slots);
+            os.Append(slots);
 
             int offset_length = max_offset_lengths_[i];
-            os.AppendInt32(i + offset_length);
+            os.Append(i + offset_length);
     
-            os.AppendInt32(indexes_length_);
+            os.Append(indexes_length_);
             indexes_length_ += (i + offset_length) * slots;
    
             if (option_.build_type == 0)
             {
-                os.AppendInt64(data_length);
+                os.Append(data_length);
                 data_length += data_lengths_[i];
             }
 
         }
     
-        int index_offset = os.size() + sizeof(int32_t);
-        if (option_.build_type == 0)
-            index_offset += sizeof(int64_t);
-
-        os.AppendInt32(index_offset);
-        os.AppendInt64(index_offset + indexes_length_);
+        int index_offset = os.size() + sizeof(int32_t) + sizeof(int64_t);
+        os.Append(index_offset);
+        os.Append(index_offset + indexes_length_);
     }
     
     std::string BuildIndex(size_t len)
@@ -235,7 +236,9 @@ public:
             auto fd = ::open(fname.c_str(), O_RDWR | O_CREAT | O_TRUNC);
             CHECK(fd) << "Create " << fname << " failed";
 
-            auto addr = reinterpret_cast<char*>(::mmap(NULL, slot_size*slots, PROT_WRITE, MAP_PRIVATE, fd, 0));
+            auto addr = ::mmap(NULL, slot_size*slots, PROT_WRITE, MAP_PRIVATE, fd, 0);
+            CHECK(addr != MAP_FAILED) << "mmap failed " << fname;
+
             try
             {
                 FileInputStream is(index_files_[len]);
@@ -253,7 +256,7 @@ public:
                     for (int64_t probe = 0;probe < slots; probe++)
                     {
                         auto slot = static_cast<int32_t>((hash + probe) % slots);
-                        char* pos = addr+slot*slot_size;
+                        char* pos = reinterpret_cast<char*>(addr)+slot*slot_size;
                         memcpy(&slot_buf[0], pos, slot_size);
 
                         int64_t found = static_cast<int64_t>(DecodeVarint(slot_buf, 0, NULL));
@@ -357,7 +360,7 @@ public:
             dos = new FileOutputStream(file);
             data_streams_[len] = dos;
             
-            dos->AppendInt8('\0');
+            dos->Append('\0');
         }
 
         return dos;
