@@ -72,13 +72,14 @@ int build(const char* input, const char* output, const scdb::Writer::Option& opt
     if (fulltest)
     {
         LOG(INFO) << "Full Test Run";
+        scdb::Timestamp fs(scdb::Timestamp::Now());
         scdb::Reader* reader = scdb::CreateReader(scdb::Reader::Option(), output);
         for (auto& ti : vt)
         {
             bool exist = reader->Exist(ti);
             CHECK(exist) << "Unexpect result " << ti << " should in sets";
         }
-        LOG(INFO) << "Full Test Pass!!!";
+        LOG(INFO) << "Full Test Pass!!! use " << scdb::Timestamp::Now().MicroSecondsSinceEpoch() - fs.MicroSecondsSinceEpoch() << " microseconds";
     }
     return 0;
 }

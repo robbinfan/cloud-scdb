@@ -23,7 +23,11 @@ class MarisaTrieReader::Impl
 {
 public:
     Impl(const Reader::Option& option, const std::string& fname)
-        : option_(option)
+        : option_(option),
+          get_func_(&Impl::GetEmpty),
+          get_as_string_func_(&Impl::GetEmptyAsString),
+          exist_func_(&Impl::ExistRawKey)
+
     {
         int32_t pfd_offset = 0;
         int32_t trie_offset = 0;
@@ -107,6 +111,28 @@ public:
         }
     
         trie_.map(index_ptr_, data_offset - trie_offset);
+
+        if (writer_option_.build_type == 0)
+        {
+            switch (writer_option_.compress_type)
+            {
+                case 0:
+                    get_func_ = &Impl::GetRawKey;
+                    get_as_string_func_ = &Impl::GetRawKeyAsString;
+                    break;
+                case 1:
+                    get_as_string_func_ = &Impl::GetCompressedValueAsString;
+                    break;
+                case 2:
+                    get_as_string_func_ = &Impl::GetPrefixKeyAsString;
+                    break;
+            }
+        }
+
+        if (writer_option_.compress_type == 2)
+        {
+            exist_func_ = &Impl::ExistPrefixKey;
+        }
     }
     
     ~Impl()
@@ -115,37 +141,6 @@ public:
         ::close(fd_);
     }
   
-    StringPiece GetValue(uint32_t id, size_t len) const
-    {
-        if (writer_option_.IsNoDataSection())
-        {
-            return StringPiece("");
-        }
-
-        auto offset = pfd_.Extract(id);
-        auto data_offset = data_offsets_[len];
-        auto block_ptr = reinterpret_cast<const int8_t*>(data_ptr_ + data_offset + offset);
-
-        size_t prefix_length;
-        auto value_length = DecodeVarint(block_ptr, block_ptr + 10, &prefix_length);
-        return StringPiece(reinterpret_cast<const char*>(block_ptr + prefix_length), value_length);
-    }
-
-    StringPiece GetRawKey(const StringPiece& k) const
-    {
-        DCHECK(!writer_option_.IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
-
-        StringPiece result("");
-        marisa::Agent agent;
-        agent.set_query(k.data(), k.length());
-        if (!trie_.lookup(agent))
-        {
-            return result;
-        }
-  
-        return GetValue(agent.key().id(), k.length());
-    }
-
     std::vector<std::pair<std::string, std::string>> PrefixGetAsString(const StringPiece& k, size_t count) const
     {
         std::vector<std::pair<std::string, std::string>> m;
@@ -237,6 +232,53 @@ public:
         return m;
     }
 
+    StringPiece GetValue(uint32_t id, size_t len) const
+    {
+        if (writer_option_.IsNoDataSection())
+        {
+            return StringPiece("");
+        }
+
+        auto offset = pfd_.Extract(id);
+        auto data_offset = data_offsets_[len];
+        auto block_ptr = reinterpret_cast<const int8_t*>(data_ptr_ + data_offset + offset);
+
+        size_t prefix_length;
+        auto value_length = DecodeVarint(block_ptr, block_ptr + 10, &prefix_length);
+        return StringPiece(reinterpret_cast<const char*>(block_ptr + prefix_length), value_length);
+    }
+
+    StringPiece GetRawKey(const StringPiece& k) const
+    {
+        DCHECK(!writer_option_.IsNoDataSection()) << "Invalid Operation, No Value has been load!!!";
+
+        StringPiece result("");
+        marisa::Agent agent;
+        agent.set_query(k.data(), k.length());
+        if (!trie_.lookup(agent))
+        {
+            return result;
+        }
+  
+        return GetValue(agent.key().id(), k.length());
+    }
+
+    std::string GetRawKeyAsString(const StringPiece& k) const
+    {
+        return GetRawKey(k).ToString();
+    }
+
+
+    StringPiece GetEmpty(const StringPiece& key) const
+    {
+        return StringPiece("");
+    }
+
+    std::string GetEmptyAsString(const StringPiece& key) const
+    {
+        return "";
+    }
+
     std::string GetPrefixKeyAsString(const StringPiece& key) const
     {
         std::string result;
@@ -285,45 +327,26 @@ public:
 
     bool Exist(const StringPiece& key) const
     {
-        if (writer_option_.compress_type == 2)
-            return ExistPrefixKey(key);
-        return ExistRawKey(key);
+        return (this->*exist_func_)(key);
     }
 
     StringPiece Get(const StringPiece& key) const
     {
-        if (writer_option_.build_type == 1)
-        {
-            return StringPiece("");
-        }
-
-        if (writer_option_.compress_type == 0)
-        {
-            return GetRawKey(key);
-        }
-
-        return StringPiece("");
+        return (this->*get_func_)(key);
     }
 
     std::string GetAsString(const StringPiece& key) const
     {
-        if (writer_option_.build_type == 1)
-            return "";
-
-        if (writer_option_.compress_type == 0)
-            return GetRawKey(key).ToString();
-
-        if (writer_option_.compress_type == 1)
-            return GetCompressedValueAsString(key);
-
-        if (writer_option_.compress_type == 2)
-            return GetPrefixKeyAsString(key);
-        return "";
+        return (this->*get_as_string_func_)(key);
     }
 
 private:
     Reader::Option option_;
     Writer::Option writer_option_;
+
+    typedef StringPiece (Impl::*GetFunc)(const StringPiece&) const;
+    typedef std::string (Impl::*GetAsStringFunc)(const StringPiece&) const;
+    typedef bool (Impl::*ExistFunc)(const StringPiece&) const;
 
     int fd_;
     uint64_t length_;
@@ -336,6 +359,10 @@ private:
 
     marisa::Trie trie_;
     PForDelta pfd_;
+
+    GetFunc get_func_;
+    GetAsStringFunc get_as_string_func_;
+    ExistFunc exist_func_;
 }; 
 
 MarisaTrieReader::MarisaTrieReader(const Reader::Option& option, const std::string& fname)
