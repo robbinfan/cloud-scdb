@@ -35,7 +35,7 @@ public:
 
     void Put(const StringPiece& k)
     {
-        DCHECK(option_.build_type==1) << "Expect Build without value";
+        DCHECK(option_.build_type==1||option_.compress_type==2) << "Expect Build without value";
 
         auto len = k.length();
         if (len == 0)

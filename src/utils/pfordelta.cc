@@ -102,6 +102,8 @@ PForDelta::PForDelta(const std::vector<uint64_t>& v)
             bits_except_min_ = 0;
 
             encoding = true;
+
+            extract_except_func_ = &PForDelta::ExtractExceptMax;
         }
     }
 
@@ -149,6 +151,8 @@ PForDelta::PForDelta(const std::vector<uint64_t>& v)
             bits_except_min_ = lgy;
 
             encoding = true;
+
+            extract_except_func_ = &PForDelta::ExtractExceptMin;
         }
     }
 
@@ -220,6 +224,7 @@ PForDelta::PForDelta(const std::vector<uint64_t>& v)
                 bits_except_max_ = lgemax;
 
                 is_except_ = true;
+                extract_except_func_ = &PForDelta::ExtractExcept;
             }
         }
     }
@@ -409,6 +414,29 @@ uint64_t PForDelta::GetNum64(uint64_t* A, uint64_t start, uint32_t length) const
     return result;
 }
 
+uint64_t PForDelta::ExtractExcept(uint64_t except_idx) const
+{
+    auto n = except_rank_.rank(except_idx);
+    if (except_bv_[except_idx-1])
+    {
+        return min_+GetNum64(except_min_, (n-1)*bits_except_min_, bits_except_min_);
+    }
+    else
+    {
+        return lim_p_+GetNum64(except_max_, (except_idx-n-1)*bits_except_max_, bits_except_max_);
+    }
+}
+
+uint64_t PForDelta::ExtractExceptMin(uint64_t except_idx) const
+{
+    return min_+GetNum64(except_min_, (except_idx-1)*bits_except_min_, bits_except_min_);
+}
+
+uint64_t PForDelta::ExtractExceptMax(uint64_t except_idx) const
+{
+    return lim_p_+GetNum64(except_max_, (except_idx-1)*bits_except_max_, bits_except_max_);
+}
+
 uint64_t PForDelta::Extract(uint64_t idx) const
 {
     auto r = bv_rank_(idx+1);
@@ -416,31 +444,7 @@ uint64_t PForDelta::Extract(uint64_t idx) const
     {
         return bas_p_+GetNum64(p_, (r-1)*b_, b_);
     }
-    else
-    {
-        auto except_idx = idx + 1 - r;
-        if (is_except_)
-        {
-            auto ii = except_rank_.rank(except_idx);
-
-            if (except_bv_[except_idx-1])
-            {
-                auto n = GetNum64(except_min_, (ii-1)*bits_except_min_, bits_except_min_);
-                return min_ + n;
-            }
-            else
-                return lim_p_+GetNum64(except_max_, (except_idx-ii-1)*bits_except_max_, bits_except_max_);
-        }
-        else
-        {
-            if (num_except_min_)
-                return min_+GetNum64(except_min_, (except_idx-1)*bits_except_min_, bits_except_min_);
-            else
-                return lim_p_+GetNum64(except_max_, (except_idx-1)*bits_except_max_, bits_except_max_);
-        }
-    }
-
-    return 0;
+    return (this->*extract_except_func_)(idx+1-r);
 }
 
 void PForDelta::Save(const std::string& fname)
@@ -529,6 +533,17 @@ void PForDelta::Load(const std::string& fname, size_t offset)
 
     is.read((char*)&is_except_, sizeof(bool));
 
+    if (is_except_)
+    {
+        extract_except_func_ = &PForDelta::ExtractExcept;
+    }
+    else
+    {
+        if (num_except_min_)
+            extract_except_func_ = &PForDelta::ExtractExceptMin;
+        else
+            extract_except_func_ = &PForDelta::ExtractExceptMax;
+    }
     auto n = GetArraySize(num_p_, b_);
     if (n)
     {
