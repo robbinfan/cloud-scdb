@@ -5,6 +5,8 @@
 #include "marisa-trie_reader.h"
 #include "marisa-trie_writer.h"
 
+#include <glog/logging.h>
+
 namespace scdb {
 
 Reader* CreateReader(const Reader::Option& option, const std::string& input)
@@ -19,12 +21,22 @@ Reader* CreateReader(const Reader::Option& option, const std::string& input)
     is.read(buf, sizeof buf);
     is.close();
 
-    if (strncmp(buf, "SCDBV1.", 7) == 0)
+    if (strncmp(buf, "SCDBV1.", 7))
     {
-        return new MarisaTrieReader(option, input);
+        return NULL;
     }
 
-    return NULL;
+    Reader* reader =  NULL;
+    try
+    {
+        reader = new MarisaTrieReader(option, input);
+    }
+    catch (const std::exception& e)
+    {
+        DLOG(ERROR) << "make writer failed: " << e.what();
+    }
+
+    return reader;
 }
 
 Writer* CreateWriter(const Writer::Option& option, const std::string& output)

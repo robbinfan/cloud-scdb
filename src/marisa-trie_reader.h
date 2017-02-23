@@ -19,8 +19,7 @@ public:
     virtual StringPiece Get(const StringPiece& k) const;
     virtual std::string GetAsString(const StringPiece& k) const;
 
-    virtual std::vector<std::pair<std::string, StringPiece>> PrefixGet(const StringPiece& prefix, size_t count) const;
-    virtual std::vector<std::pair<std::string, std::string>> PrefixGetAsString(const StringPiece& prefix, size_t count) const;
+    virtual std::vector<std::pair<std::string, std::string>> PrefixGet(const StringPiece& prefix, size_t count) const;
 
 private:
     class Impl;

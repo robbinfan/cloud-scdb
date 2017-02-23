@@ -30,14 +30,8 @@ public:
     // for uncompressed values of [key], more copy and uncompress time than Get
     virtual std::string GetAsString(const StringPiece& key) const = 0; 
 
-    // Get values of prefix, at most [count] results
-    virtual std::vector<std::pair<std::string, StringPiece>> PrefixGet(const StringPiece& prefix, size_t count) const
-    {
-        throw std::runtime_error("Not Implemented");
-    }
-
     // Get uncomressed values of prefix, more copy and uncomressed time than PrefixGet
-    virtual std::vector<std::pair<std::string, std::string>> PrefixGetAsString(const StringPiece& prefix, size_t count) const
+    virtual std::vector<std::pair<std::string, std::string>> PrefixGet(const StringPiece& prefix, size_t count) const
     {
         throw std::runtime_error("Not Implemented");
     }

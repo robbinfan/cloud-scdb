@@ -88,8 +88,8 @@ int main(int argc, char *argv[])
     ::cmdopt_init(&cmdopt, argc, argv, "fwi:o:t:h", long_options);
 
     scdb::Writer::Option opt;
-    opt.build_type = 1;
-    opt.compress_type = 0;
+    opt.build_type = scdb::Writer::kSet;
+    opt.compress_type = scdb::Writer::kNone;
 
     bool fulltest = false;
 

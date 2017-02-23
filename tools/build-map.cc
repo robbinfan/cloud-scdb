@@ -49,21 +49,12 @@ int build(const char* input, const char* output, const scdb::Writer::Option& opt
         if (strlen(buf) == 0)
             continue;
 
-        if (opt.compress_type == 2)
-        {
-            writer->Put(buf);
-            if (fulltest)
-                vt.push_back(buf);
-        }
-        else
-        {
-            std::vector<std::string> v;
-            boost::algorithm::split(v, buf, boost::is_any_of("\t"));
-            writer->Put(v[0], v[1]);
+        std::vector<std::string> v;
+        boost::algorithm::split(v, buf, boost::is_any_of("\t"));
+        writer->Put(v[0], v[1]);
 
-            if (fulltest)
-                vt.push_back(v[0]);
-        }
+        if (fulltest)
+            vt.push_back(v[0]);
     }
     writer->Close();
     delete writer;
@@ -105,8 +96,8 @@ int main(int argc, char *argv[])
     ::cmdopt_init(&cmdopt, argc, argv, "fcdwi:o:t:h", long_options);
 
     scdb::Writer::Option opt;
-    opt.build_type = 0;
-    opt.compress_type = 0;
+    opt.build_type = scdb::Writer::kMap;
+    opt.compress_type = scdb::Writer::kNone;
 
     bool fulltest = false;
 
@@ -117,12 +108,12 @@ int main(int argc, char *argv[])
         switch (label) {
             case 'c': 
             {
-                opt.compress_type = 1;
+                opt.compress_type = scdb::Writer::kSnappy;
                 break;
             }
             case 'd':
             {
-                opt.compress_type = 2;
+                opt.compress_type = scdb::Writer::kDFA;
                 break;
             }
             case 'w':

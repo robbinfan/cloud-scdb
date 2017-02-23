@@ -24,8 +24,19 @@ public:
     Impl(const Writer::Option& option, const std::string& fname)
         : option_(option),
           fname_(fname),
-          done_(false)
+          closed_(false)
     {
+        if (option_.build_type == kMap)
+        {
+            if (option_.compress_type == kDFA)
+            {
+                put_func_ = &Impl::PutAsTrie;
+            }
+            else
+            {
+                put_func_ = &Impl::PutRawOrSnappy;
+            }
+        }
     }
 
     ~Impl()
@@ -35,7 +46,7 @@ public:
 
     void Put(const StringPiece& k)
     {
-        DCHECK(option_.build_type==1||option_.compress_type==2) << "Expect Build without value";
+        DCHECK(option_.build_type==kSet) << "Expect Build without value";
 
         auto len = k.length();
         if (len == 0)
@@ -43,33 +54,32 @@ public:
 
         marisa::Key key;
         key.set_str(k.data(), len);
-        keyset_.push_back(key);
-    }
-
-    void PutTogether(const StringPiece& k, const StringPiece& v)
-    {
-        std::string ktv(k.ToString());
-        ktv.append("\t");
-        ktv.append(v.ToString());
-
-        marisa::Key key;
-        key.set_str(ktv.data(), ktv.length());
-        keyset_.push_back(key);
+        keys_.push_back(key);
     }
 
     void Put(const StringPiece& k, const StringPiece& v)
     {
+        if (k.length() == 0) // unlikely
+            return ;
+        (this->*put_func_)(k, v);
+    }
+
+    void PutAsTrie(const StringPiece& k, const StringPiece& v)
+    {
+        marisa::Key key;
+        key.set_str(k.data(), k.length());
+        keys_.push_back(key);
+
+        marisa::Key value;
+        value.set_str(v.data(), v.length());
+        values_.push_back(value);
+    }
+
+    void PutRawOrSnappy(const StringPiece& k, const StringPiece& v)
+    {
         DCHECK(!option_.IsNoDataSection()) << "Expect Build with value";
 
         auto len = k.length();
-        if (len == 0)
-            return ;
-
-        if (option_.IsNoDataSection())
-        {
-            PutTogether(k, v);
-            return ;
-        }
         ResizeData(len);
 
         int64_t data_length = data_lengths_[len];
@@ -83,7 +93,7 @@ public:
 
             size_t encode_length = 0;
             size_t value_length = v.length();
-            if (option_.compress_type == 1)
+            if (option_.compress_type == kSnappy)
             {
                 std::string cv;
                 snappy::Compress(v.data(), v.length(), &cv);
@@ -106,14 +116,14 @@ public:
 
         marisa::Key key;
         key.set_str(k.data(), len);
-        keyset_.push_back(key);
+        keys_.push_back(key);
         offsets_.push_back(data_length);
         key_counts_[len]++;
     }
 
     void Close()
     {
-        if (done_)
+        if (closed_)
             return ;
 
         for (size_t i = 0; i < data_streams_.size(); i++)
@@ -127,16 +137,23 @@ public:
         std::vector<std::string> files;
 
         // we must build index first
-        auto trie_file = BuildTrie(); // Must build trie first
-        auto pfd_file = BuildPFD();
+        auto key_trie_file = BuildTrie(keys_, "key_trie"); // Must build trie first
+        std::string value_trie_file;
+        if (option_.compress_type == kDFA)
+        {
+            value_trie_file = BuildTrie(values_, "value_trie");
+        }
 
+        auto pfd_file = BuildPFD();
         std::string metadata_file = option_.temp_folder + "metadata.dat";
-        WriteMetaData(metadata_file, pfd_file, trie_file);
+        WriteMetaData(metadata_file, pfd_file, key_trie_file);
 
         files.push_back(metadata_file);
         if (!pfd_file.empty())
             files.push_back(pfd_file);
-        files.push_back(trie_file); // let trie closed to data, they will mmape together
+        files.push_back(key_trie_file); // let trie closed to data, they will mmape together
+        if (!value_trie_file.empty())
+            files.push_back(value_trie_file);
 
         for (auto& file : data_files_)
         {
@@ -153,10 +170,12 @@ public:
         }
 
         Cleanup(files);
-        done_ = true;
+        closed_ = true;
     }
     
-    void WriteMetaData(const std::string& fname, const std::string& pfd_file, const std::string& trie_file)
+    void WriteMetaData(const std::string& fname, 
+                       const std::string& pfd_file, 
+                       const std::string& key_trie_file)
     {
         FileOutputStream os(fname);
     
@@ -168,11 +187,11 @@ public:
         os.Append(now.MicroSecondsSinceEpoch());
 
         // Write Option
-        os.Append(option_.compress_type);
-        os.Append(option_.build_type);
+        os.Append<int8_t>(option_.compress_type);
+        os.Append<int8_t>(option_.build_type);
         os.Append(option_.with_checksum);
 
-        if (!option_.IsNoDataSection())
+        if (!option_.IsNoDataSection() && option_.compress_type != kDFA)
         {
             os.Append<int32_t>(GetNumKeyCount());
             os.Append<int32_t>(key_counts_.size()-1);
@@ -196,13 +215,13 @@ public:
         if (!pfd_file.empty())
             FileUtil::GetFileSize(pfd_file, &pfd_length);
 
-        uint64_t trie_length = 0;
-        FileUtil::GetFileSize(trie_file, &trie_length);
+        uint64_t key_trie_length = 0;
+        FileUtil::GetFileSize(key_trie_file, &key_trie_length);
 
         auto index_offset = os.size() + sizeof(int32_t)*2 + sizeof(int64_t);
         os.Append<int32_t>(index_offset);
         os.Append<int32_t>(index_offset + pfd_length);
-        os.Append<int64_t>(index_offset + pfd_length + trie_length);
+        os.Append<int64_t>(index_offset + pfd_length + key_trie_length);
     }
     
     std::string BuildPFD()
@@ -210,10 +229,20 @@ public:
         if (option_.IsNoDataSection())
             return "";
 
-        std::vector<uint64_t> v(keyset_.size());
-        for (size_t i = 0;i < keyset_.size(); i++)
+        std::vector<uint64_t> v(keys_.size());
+        if (option_.compress_type == kDFA)
         {
-            v[keyset_[i].id()] = offsets_[i];
+            for (size_t i = 0;i < keys_.size(); i++)
+            {
+                v[keys_[i].id()] = values_[i].id();
+            }
+        }
+        else
+        {
+            for (size_t i = 0;i < keys_.size(); i++)
+            {
+                v[keys_[i].id()] = offsets_[i];
+            }
         }
 
         auto name = option_.temp_folder + "pfd.dat";
@@ -222,16 +251,16 @@ public:
         return name;
     }
 
-    std::string BuildTrie()
+    std::string BuildTrie(marisa::Keyset& s, const std::string& prefix)
     {
         marisa::Trie trie;
-        trie.build(keyset_);
+        trie.build(s);
 
-        std::string fname = option_.temp_folder + "trie.dat";
+        std::string fname = option_.temp_folder + prefix + ".dat";
         trie.save(fname.c_str());
         return fname;
     }
-   
+  
     void MergeFiles(const std::vector<std::string>& files)
     {
         FileOutputStream os(fname_);
@@ -335,9 +364,10 @@ public:
 private:
     Writer::Option option_;
     std::string fname_;
-    bool done_;
+    bool closed_;
 
-    marisa::Keyset keyset_;
+    marisa::Keyset keys_;
+    marisa::Keyset values_;
 
     std::vector<std::string> data_files_;
     std::vector<FileOutputStream*> data_streams_;
@@ -349,6 +379,9 @@ private:
     std::vector<int32_t> last_values_lengths_;
 
     std::vector<uint32_t> offsets_;
+
+    typedef void (Impl::*PutFunc)(const StringPiece&, const StringPiece&);
+    PutFunc put_func_;
 };
 
 MarisaTrieWriter::MarisaTrieWriter(const Writer::Option& option, const std::string& fname)

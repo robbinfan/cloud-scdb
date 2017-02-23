@@ -7,12 +7,25 @@ namespace scdb {
 class Writer
 {
 public:
+    enum CompressType
+    {
+        kNone = 0,
+        kSnappy = 1,
+        kDFA = 2
+    };
+
+    enum BuildType
+    {
+        kMap = 0,
+        kSet = 1,
+    };
+
     struct Option
     {
         Option()
             : temp_folder("./tmp"),
-              compress_type(0),
-              build_type(0),
+              compress_type(kNone),
+              build_type(kMap),
               with_checksum(false)
         {}
 
@@ -21,15 +34,12 @@ public:
             if (build_type == 1)
                 return true;
 
-            if (compress_type == 2)
-                return true;
-
             return false;
         }
 
         std::string temp_folder;
-        int8_t compress_type; // 0: no compress, 1: snappy, 2: trie
-        int8_t build_type; // 0: k and v (as map), 1: only k(as set)
+        CompressType compress_type;
+        BuildType build_type;
         bool with_checksum; // a checksum attached at endof file, will check when reader load
     };
 
